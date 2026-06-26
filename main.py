@@ -1,11 +1,15 @@
 import datetime
-from typing import List, Tuple, Optional, Union
-from WeatherApp import WeatherApp
+from typing import List
+from utilities import get_auto_location
+from forecast import Forecast
+from brain import Brain
 
 
 class Main:
     def __init__(self) -> None:
-        self.weather_app = WeatherApp()
+        self.weather_app = Forecast()
+        self.wizard = Brain()
+        self.weather_summary = ""
 
     def run(self) -> None:
         print("\n=== 🌦️ Weather Wizard 3000 🌈 ===")
@@ -71,7 +75,7 @@ class Main:
                 choice = self.get_menu_choice()
 
                 if choice == 1:
-                    print(self.weather_app.ai_suggestion())
+                    print(self.wizard.ai_suggestion(self.weather_summary))
                     break
                 elif choice == 2:
                     break
@@ -115,7 +119,8 @@ class Main:
 
         try:
             self.weather_app.fetch_weather_data_with_city_name(city, target_date)
-            print("\n" + self.weather_app.get_weather_message())
+            self.weather_summary = self.weather_app.get_weather_message()
+            print("\n" + self.weather_summary)
             return False
         except Exception as e:
             print(f"⛈️  Failed to fetch data: {str(e)}")
@@ -124,10 +129,11 @@ class Main:
     def handle_auto_location(self, target_date: datetime.date) -> bool:
         print("\n🔍 Detecting your location...")
         try:
-            coords: List[float] = WeatherApp.get_auto_location()
+            coords: List[float] = get_auto_location()
             print(f"📍 Detected coordinates: {coords[0]:.4f}, {coords[1]:.4f}")
             self.weather_app.fetch_weather_data(coords[0], coords[1], target_date)
-            print("\n" + self.weather_app.get_weather_message())
+            self.weather_summary = self.weather_app.get_weather_message()
+            print("\n" + self.weather_summary)
             return False
         except Exception as e:
             print(f"🌩️  Location detection failed: {str(e)}")
@@ -143,7 +149,8 @@ class Main:
 
             if self.is_valid_coordinate(lat, -90, 90) and self.is_valid_coordinate(lon, -180, 180):
                 self.weather_app.fetch_weather_data(lat, lon, target_date)
-                print("\n" + self.weather_app.get_weather_message())
+                self.weather_summary = self.weather_app.get_weather_message()
+                print("\n" + self.weather_summary)
             else:
                 print("❌  Invalid coordinates! Values out of range.")
             return False
