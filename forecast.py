@@ -5,7 +5,7 @@ from utilities import make_api_request, convert_kelvin_to_celsius_fahrenheit
 
 class Forecast:
     OWM_ENDPOINT: str = "https://api.openweathermap.org/data/2.5/forecast"
-    API_KEY: str = "035b1007f3c2ef182d828e688ec29940"
+    API_KEY: str = os.environ.get("OWM_API_KEY", "")
 
     def __init__(self) -> None:
         self.city_name: str = ""
