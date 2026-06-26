@@ -3,7 +3,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import AIMessage
-from prompts import *
+from prompts import system_prompt, example_forecast, example_response
 from dotenv import load_dotenv
 
 load_dotenv()

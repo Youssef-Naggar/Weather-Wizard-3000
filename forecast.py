@@ -19,13 +19,13 @@ class Forecast:
         self.avg_humidity: float = 0.0
 
     def fetch_weather_data(self, lat: float, lon: float, target_date: datetime.date) -> None:
-        url_string: str = f"{self.OWM_ENDPOINT}?lat={lat}&lon={lon}&appid={self.API_KEY}"
-        weather_data: Dict[str, Any] = make_api_request(url_string)
+        params: Dict[str, Any] = {"lat": lat, "lon": lon, "appid": self.API_KEY}
+        weather_data: Dict[str, Any] = make_api_request(self.OWM_ENDPOINT, params)
         self.process_weather_data(weather_data, target_date)
 
     def fetch_weather_data_with_city_name(self, city_name: str, target_date: datetime.date) -> None:
-        url_string: str = f"{self.OWM_ENDPOINT}?q={city_name}&appid={self.API_KEY}"
-        weather_data: Dict[str, Any] = make_api_request(url_string)
+        params: Dict[str, Any] = {"q": city_name, "appid": self.API_KEY}
+        weather_data: Dict[str, Any] = make_api_request(self.OWM_ENDPOINT, params)
         self.process_weather_data(weather_data, target_date)
 
     def process_weather_data(self, weather_data: Dict[str, Any], target_date: datetime.date) -> None:
