@@ -36,7 +36,7 @@ def get_auto_location() -> List[float]:
 
     for provider in providers:
         try:
-            response: requests.Response = requests.get(provider["url"], timeout=5)
+            response: requests.Response = requests.get(provider["url"])
 
             if response.status_code != 200:
                 raise Exception(f"HTTP Status {response.status_code}")

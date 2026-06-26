@@ -2,6 +2,9 @@ from typing import Dict, List, Any
 import os
 import datetime
 from utilities import make_api_request, convert_kelvin_to_celsius_fahrenheit
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class Forecast:
     OWM_ENDPOINT: str = "https://api.openweathermap.org/data/2.5/forecast"

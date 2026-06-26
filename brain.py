@@ -4,6 +4,9 @@ from pydantic import BaseModel, Field
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import AIMessage
 from prompts import *
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class AiSuggestionOutput(BaseModel):
     ai_suggestion: str = Field()
@@ -12,7 +15,7 @@ class Brain:
     def __init__(self):
         self.llm = ChatGoogleGenerativeAI(
             model="gemini-2.5-flash",
-            temperature=0.5,
+            temperature=0.25,
             api_key = os.environ.get("GEMINI_API_KEY", "")
         ).with_structured_output(AiSuggestionOutput)
 
@@ -25,4 +28,4 @@ class Brain:
     def ai_suggestion(self,forecast_str:str)->str:
         chain = self.prompt_template | self.llm
         response = chain.invoke({"forecast": forecast_str})
-        return response
+        return response.ai_suggestion
