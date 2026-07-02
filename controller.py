@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import datetime
 from typing import Dict
 from utilities import get_auto_location
-from forecast import Forecast
+from forecast import Forecast, WeatherClient
 from brain import Brain
 from ui import WeatherUI
 
@@ -48,7 +48,8 @@ class CitySearchCommand(Command):
             self.app.ui.print_error("City name cannot be empty.")
             return True
         try:
-            self.app.forecast_service.fetch_weather_data_with_city_name(city, self.app.target_date)
+            raw_data = self.app.weather_client.fetch_weather_by_city(city)
+            self.app.forecast_service.process_weather_data(raw_data, self.app.target_date)
             self.app.weather_summary = self.app.forecast_service.get_weather_message()
             self.app.ui.print_message("\n" + self.app.weather_summary)
             return False
@@ -65,7 +66,8 @@ class AutoLocationCommand(Command):
         try:
             coords = get_auto_location()
             self.app.ui.print_message(f"📍 Detected coordinates: {coords[0]:.4f}, {coords[1]:.4f}")
-            self.app.forecast_service.fetch_weather_data(coords[0], coords[1], self.app.target_date)
+            raw_data = self.app.weather_client.fetch_weather_by_coordinates(coords[0], coords[1])
+            self.app.forecast_service.process_weather_data(raw_data, self.app.target_date)
             self.app.weather_summary = self.app.forecast_service.get_weather_message()
             self.app.ui.print_message("\n" + self.app.weather_summary)
             return False
@@ -86,7 +88,8 @@ class ManualCoordinatesCommand(Command):
             return True
 
         try:
-            self.app.forecast_service.fetch_weather_data(lat, lon, self.app.target_date)
+            raw_data = self.app.weather_client.fetch_weather_by_coordinates(lat, lon)
+            self.app.forecast_service.process_weather_data(raw_data, self.app.target_date)
             self.app.weather_summary = self.app.forecast_service.get_weather_message()
             self.app.ui.print_message("\n" + self.app.weather_summary)
             return False
@@ -118,6 +121,7 @@ class SkipAiSuggestionCommand(Command):
 
 class WeatherApp:
     def __init__(self) -> None:
+        self.weather_client = WeatherClient()
         self.forecast_service = Forecast()
         self.brain = Brain()
         self.ui = WeatherUI()

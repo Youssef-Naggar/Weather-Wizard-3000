@@ -6,10 +6,20 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-class Forecast:
+class WeatherClient:
     OWM_ENDPOINT: str = "https://api.openweathermap.org/data/2.5/forecast"
     API_KEY: str = os.environ.get("OWM_API_KEY", "")
 
+    def fetch_weather_by_coordinates(self, lat: float, lon: float) -> Dict[str, Any]:
+        params: Dict[str, Any] = {"lat": lat, "lon": lon, "appid": self.API_KEY}
+        return make_api_request(self.OWM_ENDPOINT, params)
+
+    def fetch_weather_by_city(self, city_name: str) -> Dict[str, Any]:
+        params: Dict[str, Any] = {"q": city_name, "appid": self.API_KEY}
+        return make_api_request(self.OWM_ENDPOINT, params)
+
+
+class Forecast:
     def __init__(self) -> None:
         self.city_name: str = ""
         self.will_rain: bool = False
@@ -17,16 +27,6 @@ class Forecast:
         self.feels_like_temp_k: float = 0.0
         self.min_temp_k: float = 0.0
         self.avg_humidity: float = 0.0
-
-    def fetch_weather_data(self, lat: float, lon: float, target_date: datetime.date) -> None:
-        params: Dict[str, Any] = {"lat": lat, "lon": lon, "appid": self.API_KEY}
-        weather_data: Dict[str, Any] = make_api_request(self.OWM_ENDPOINT, params)
-        self.process_weather_data(weather_data, target_date)
-
-    def fetch_weather_data_with_city_name(self, city_name: str, target_date: datetime.date) -> None:
-        params: Dict[str, Any] = {"q": city_name, "appid": self.API_KEY}
-        weather_data: Dict[str, Any] = make_api_request(self.OWM_ENDPOINT, params)
-        self.process_weather_data(weather_data, target_date)
 
     def process_weather_data(self, weather_data: Dict[str, Any], target_date: datetime.date) -> None:
         self.city_name = weather_data["city"]["name"]
