@@ -1,35 +1,40 @@
 # Weather Wizard 3000 🌦️
 
-A personal weather forecasting assistant with AI-powered outfit recommendations, built in Python.
+A personal weather forecasting assistant with dynamic, verified AI-powered outfit recommendations, engineered in Python using clean MVC and Command pattern architectures.
 
-![WhatsApp Image 2025-04-07 at 00 44 47](https://github.com/user-attachments/assets/93c72502-7f23-41ec-85ff-5440fe69a86d)
+---
 
 ## 📋 Overview
 
-Weather Wizard 3000 is a command-line application that provides weather forecasts and personalized outfit recommendations. The app fetches real-time weather data using the OpenWeatherMap API and leverages AI to suggest appropriate clothing based on the current conditions.
+Weather Wizard 3000 is an interactive CLI application that provides weather forecasts and highly personalized clothing/comfort recommendations. 
 
-### ✨ Features
+The application fetches real-time forecast data via the OpenWeatherMap API, resolves coordinate lookups via multiple geolocation providers, and dynamically prompts LLMs via **LiteLLM** to suggest appropriate styling choices matching the user's demographic profile, climate sensitivities, style preferences, and current commute requirements.
 
-- **5-day weather forecast** - Get weather predictions for today and the next 4 days
-- **Multiple location options**:
-  - Search by city name
-  - Auto-detect location using IP address
-  - Enter coordinates manually
-- **Comprehensive weather data**:
-  - Temperature (max, min, and feels like)
-  - Humidity levels
-  - Rain predictions
-- **AI-powered outfit suggestions** tailored to weather conditions
-- **User-friendly interface** with emoji-enhanced output for better readability
+---
+
+## ✨ Features
+
+- **5-Day Weather Forecast:** Detailed insights into maximum, minimum, and feels-like temperatures, average humidity, and rain forecasts.
+- **Multiple Geolocation Options:**
+  - Automated location detection using IP coordinates (with fallback support).
+  - Search by city name.
+  - Manual coordinate inputs (latitude and longitude).
+- **Universal LLM Setup (SDK-Agnostic):** Dynamically configure and switch model routing to any supported provider in **LiteLLM** (OpenAI, Anthropic, Gemini, Groq, Cohere, Ollama, etc.) directly from the settings menu.
+- **Hermes-Style Live Verification:** Credentials and routing are validated via a live test call to the LLM before any configuration changes are written to `model-settings.json`.
+- **Personalized Recommendations:**
+  - Configurable comfort settings (cold thresholds, hot thresholds, perfect temperature).
+  - Style configurations (style profile, favorite colors).
+  - Trip-specific parameters asked dynamically (commute transit mode, dress codes, trip purpose).
+
+---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
 
-- Python 3.6+
-- Internet connection
-- OpenWeatherMap API key
-- (Optional) Google Gemini API key for AI outfit suggestions
+- Python 3.10+
+- Active OpenWeatherMap API key (set as `OWM_API_KEY` in environment variables or `.env` file)
+- API credentials for your chosen LLM provider (configured securely at runtime)
 
 ### Installation
 
@@ -39,70 +44,75 @@ Weather Wizard 3000 is a command-line application that provides weather forecast
    cd weather-wizard-3000
    ```
 
-2. Install required dependencies:
+2. Install core dependencies:
    ```bash
-   pip install requests
+   pip install requests litellm prettytable pydantic python-dotenv
    ```
 
-3. Set up environment variables:
+3. (Optional) Install development and testing dependencies:
    ```bash
-   # Linux/MacOS
-   export OWM_API_KEY="your_openweathermap_api_key"
-   export GEMINI_API_KEY="your_gemini_api_key" # Optional for AI outfit suggestions
+   pip install pytest pytest-cov ruff pyrefly bandit radon xenon
+   ```
 
-   # Windows
-   set OWM_API_KEY=your_openweathermap_api_key
-   set GEMINI_API_KEY=your_gemini_api_key # Optional for AI outfit suggestions
+4. Create a `.env` file in the root directory and configure your OpenWeatherMap API Key:
+   ```env
+   OWM_API_KEY="your_openweathermap_api_key"
    ```
 
 ### Usage
 
-Run the application:
+Run the bootstrap script to start the CLI interface:
 ```bash
 python main.py
 ```
 
-Follow the interactive prompts to:
-1. Select a date for the forecast
-2. Choose a location method
-3. Get your weather forecast
-4. (Optional) Receive AI-powered outfit recommendations
+---
 
-## 📊 Project Structure
+## 🏗️ Architecture & Project Structure
 
-```
+The project strictly follows the **Model-View-Controller (MVC)** and **Command Patterns** to ensure concerns remain decoupled:
+
+```text
 weather-wizard-3000/
-├── main.py          # Main application with UI logic
-├── WeatherApp.py    # Weather data processing and API interactions
-└── README.md        # Project documentation
+├── main.py              # Boots and runs the WeatherApp controller
+├── controller.py        # Orchestrates control loops and registers Command classes
+├── ui.py                # Handles all input collection, grid layouts, and CLI menus
+├── forecast.py          # Handles weather processing logic and OpenWeatherMap clients
+├── brain.py             # Executes calls and test checks to LiteLLM completion API
+├── prompt_builder.py    # Manages user profiles, model validation, and system prompt compilations
+├── prompts.py           # Contains system templates and mock assistant response fixtures
+├── exceptions.py        # Defines domain-specific validation and setting errors
+└── utilities.py         # Includes geolocation provider registries and kelvin conversions
 ```
 
-## 🧮 How It Works
+- **Model Layer:** `Forecast` (domain entity containing weather metrics) and `WeatherClient` (HTTP fetcher).
+- **View Layer:** `WeatherUI` (CLI layout grids and user prompts).
+- **Controller Layer:** `WeatherApp` (coordinates loops) and `Command` classes (encapsulates operations like `CitySearchCommand` or `SettingsCommand`).
+- **Service Layer:** `Brain` (AI interfaces) and `prompt_builder` (profile serialization).
 
-1. The application fetches weather data from OpenWeatherMap's forecast API
-2. It processes the JSON response to extract relevant weather information
-3. For outfit suggestions, it sends a prompt to Google's Gemini API with the weather data
-4. The AI generates contextually appropriate clothing recommendations
+---
 
-## 🔒 Privacy and Security
+## 🛡️ Testing & Static Verification
 
-- The application uses your location only for weather forecasting purposes
-- API keys should be stored as environment variables, not hardcoded
-- The AI component does not store any personal information
+The project includes a robust pipeline to verify styling, typing, security, complexity, and coverage:
 
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## 📝 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🔄 Future Improvements
-
-- [ ] GUI interface
-- [ ] Mobile app version
-- [ ] Weather alerts and notifications
-- [ ] Support for more weather data points (wind, UV index, etc.)
-- [ ] Saved location favorites
-- [ ] Historical weather data
+- **Unit Testing:** Powered by `pytest` under the `tests/` directory. Run via:
+  ```bash
+  pytest
+  ```
+- **Linting & Formatting:** Strict checks via `ruff`. Run via:
+  ```bash
+  ruff check .
+  ```
+- **Type Checking:** Run checks via `pyrefly`:
+  ```bash
+  pyrefly check brain.py prompt_builder.py ui.py controller.py tests/
+  ```
+- **Security Audits:** Scan with `bandit` (ignoring testing asserts):
+  ```bash
+  bandit brain.py prompt_builder.py ui.py controller.py forecast.py exceptions.py main.py utilities.py
+  ```
+- **Complexity Checks:** Max absolute cyclomatic complexity verified under Radon and Xenon:
+  ```bash
+  xenon --max-absolute C --max-modules B --max-average A .
+  ```
