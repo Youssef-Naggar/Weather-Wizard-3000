@@ -25,27 +25,30 @@ def save_preferences(prefs: dict) -> None:
     with open('preferences.json', 'w', encoding='utf-8') as file:
         json.dump(prefs, file, indent=2)
 
-POPULAR_PROVIDERS = ["google", "openai", "anthropic", "groq", "cohere", "ollama"]
+def is_text_model(model_name: str, provider: str = None) -> bool:
+    import litellm
+    # 1. Try to find the model in litellm's pricing map
+    info = litellm.model_prices_and_context_window.get(model_name)
+    if not info and provider:
+        info = litellm.model_prices_and_context_window.get(f"{provider.lower()}/{model_name}")
+    if not info and provider:
+        # Also map 'google' to 'gemini'
+        prov_l = provider.lower()
+        lookup_prov = "gemini" if prov_l == "google" else prov_l
+        info = litellm.model_prices_and_context_window.get(f"{lookup_prov}/{model_name}")
 
-POPULAR_MODELS = {
-    "google": ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-1.5-flash"],
-    "openai": ["gpt-4o", "gpt-4o-mini", "gpt-4"],
-    "anthropic": ["claude-3-5-sonnet", "claude-3-5-haiku"],
-    "groq": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"],
-    "cohere": ["command-r-plus", "command-r"],
-    "ollama": ["llama3", "mistral", "phi3"]
-}
+    if info and "mode" in info:
+        return info["mode"] in ("chat", "completion")
 
-EXCLUDED_MODEL_SUBSTRINGS = [
-    "dall-e", "image", "tts", "whisper", "embed", 
-    "moderation", "sora", "audio", "transcribe", 
-    "speech", "translation", "clip", "flux", 
-    "imagen", "stable-diffusion", "veo"
-]
-
-def is_text_model(model_name: str) -> bool:
+    # 2. Fallback to substring matching if the model isn't in litellm's pricing registry
     name_lower = model_name.lower()
-    return not any(sub in name_lower for sub in EXCLUDED_MODEL_SUBSTRINGS)
+    excluded = [
+        "dall-e", "image", "tts", "whisper", "embed", 
+        "moderation", "sora", "audio", "transcribe", 
+        "speech", "translation", "clip", "flux", 
+        "imagen", "stable-diffusion", "veo"
+    ]
+    return not any(sub in name_lower for sub in excluded)
 
 class ModelSettings(BaseModel):
     provider: str = Field(default="google")
@@ -73,21 +76,19 @@ def validate_model_settings(settings: dict) -> None:
         raise InvalidProviderError(provider, all_providers)
 
     allowed_models = litellm.models_by_provider.get(lookup_prov, []) or litellm.models_by_provider.get(prov_lower, [])
-    text_allowed = [m for m in allowed_models if is_text_model(m)]
     
     is_model_supported = False
-    if model in text_allowed:
-        is_model_supported = True
-    elif f"{prov_lower}/{model}" in text_allowed:
-        is_model_supported = True
-    elif f"{lookup_prov}/{model}" in text_allowed:
-        is_model_supported = True
-    elif getattr(litellm, "check_valid_model", lambda m: False)(model) and is_text_model(model):
-        is_model_supported = True
-    elif getattr(litellm, "check_valid_model", lambda m: False)(f"{prov_lower}/{model}") and is_text_model(model):
-        is_model_supported = True
+    if model in allowed_models:
+        is_model_supported = is_text_model(model, provider)
+    elif f"{prov_lower}/{model}" in allowed_models:
+        is_model_supported = is_text_model(model, provider)
+    elif getattr(litellm, "check_valid_model", lambda m: False)(model):
+        is_model_supported = is_text_model(model, provider)
+    elif getattr(litellm, "check_valid_model", lambda m: False)(f"{prov_lower}/{model}"):
+        is_model_supported = is_text_model(model, provider)
 
-    if not is_model_supported and text_allowed:
+    if not is_model_supported:
+        text_allowed = [m for m in allowed_models if is_text_model(m, provider)]
         raise InvalidModelError(model, provider, text_allowed)
 
 def load_model_settings() -> dict:
