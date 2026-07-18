@@ -109,7 +109,7 @@ def test_validate_model_settings_invalid_model():
     import pytest
     
     with patch("litellm.models_by_provider", mock_models_by_provider), \
-         patch("litellm.model_prices_and_context_window", mock_model_prices_and_context_window, create=True), \
+         patch("litellm.model_cost", mock_model_prices_and_context_window, create=True), \
          pytest.raises(InvalidModelError) as excinfo:
         validate_model_settings({"provider": "google", "model": "gpt-4o", "api_key": "key"})
     assert "Invalid model 'gpt-4o' for provider 'google'" in str(excinfo.value)
@@ -120,7 +120,7 @@ def test_edit_llm_settings_mcq_success():
     settings = {"provider": "google", "model": "gemini-2.5-flash", "api_key": ""}
     
     with patch("litellm.models_by_provider", mock_models_by_provider), \
-         patch("litellm.model_prices_and_context_window", mock_model_prices_and_context_window, create=True), \
+         patch("litellm.model_cost", mock_model_prices_and_context_window, create=True), \
          patch("builtins.input", side_effect=["2", "1", "new_key"]):
         res = ui.edit_llm_settings(settings)
         assert res["provider"] == "openai"
@@ -133,7 +133,7 @@ def test_edit_llm_settings_invalid_then_valid():
     settings = {"provider": "google", "model": "gemini-2.5-flash", "api_key": ""}
     
     with patch("litellm.models_by_provider", mock_models_by_provider), \
-         patch("litellm.model_prices_and_context_window", mock_model_prices_and_context_window, create=True), \
+         patch("litellm.model_cost", mock_model_prices_and_context_window, create=True), \
          patch("builtins.input", side_effect=["99", "1", "99", "2", "", "valid_key"]), \
          patch.object(ui, "print_error") as mock_print_error:
         res = ui.edit_llm_settings(settings)
@@ -149,7 +149,7 @@ def test_edit_llm_settings_invalid_then_valid():
 
 def test_is_text_model_filters():
     from prompt_builder import is_text_model
-    with patch("litellm.model_prices_and_context_window", mock_model_prices_and_context_window, create=True):
+    with patch("litellm.model_cost", mock_model_prices_and_context_window, create=True):
         assert is_text_model("gpt-4o") is True
         assert is_text_model("gemini-2.5-pro") is True
         assert is_text_model("dall-e-3") is False
@@ -165,12 +165,12 @@ def test_validate_model_settings_rejects_non_text_models():
     import pytest
     
     with patch("litellm.models_by_provider", mock_models_by_provider), \
-         patch("litellm.model_prices_and_context_window", mock_model_prices_and_context_window, create=True), \
+         patch("litellm.model_cost", mock_model_prices_and_context_window, create=True), \
          pytest.raises(InvalidModelError):
         validate_model_settings({"provider": "openai", "model": "dall-e-3", "api_key": "key"})
         
     with patch("litellm.models_by_provider", mock_models_by_provider), \
-         patch("litellm.model_prices_and_context_window", mock_model_prices_and_context_window, create=True), \
+         patch("litellm.model_cost", mock_model_prices_and_context_window, create=True), \
          pytest.raises(InvalidModelError):
         validate_model_settings({"provider": "google", "model": "imagen-3.0-generate-001", "api_key": "key"})
 
