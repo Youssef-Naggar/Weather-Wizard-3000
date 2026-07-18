@@ -233,7 +233,6 @@ class WeatherUI:
 
     def _select_model(self, provider: str, current_model: str) -> str:
         import litellm
-        from prompt_builder import is_text_model
         
         prov_lookup = "gemini" if provider.lower() == "google" else provider.lower()
         raw_models = litellm.models_by_provider.get(prov_lookup, [])
