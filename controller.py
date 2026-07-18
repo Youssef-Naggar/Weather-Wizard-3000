@@ -176,11 +176,21 @@ class SettingsCommand(Command):
                         "api_key": ""
                     }
                 updated_settings = self.app.ui.edit_llm_settings(settings)
+                
+                self.app.ui.print_message("\n🔄 Verifying connection to LLM provider...")
                 try:
+                    # Test connection live via Brain before saving
+                    reply = self.app.brain.test_connection(
+                        updated_settings["provider"],
+                        updated_settings["model"],
+                        updated_settings["api_key"]
+                    )
+                    
                     save_model_settings(updated_settings)
-                    self.app.ui.print_message("\n✅ LLM settings updated successfully!")
-                except SettingsValidationError as e:
-                    self.app.ui.print_error(f"Failed to save settings: {str(e)}")
+                    self.app.ui.print_message(f"✅ Configuration updated successfully! (Agent replied: {reply})")
+                except Exception as e:
+                    self.app.ui.print_error(f"Failed to connect: {str(e)}")
+                    self.app.ui.print_message("❌ Settings NOT saved. Please check your credentials and try again.")
             elif choice == 2:
                 prefs = load_preferences()
                 updated_prefs = self.app.ui.edit_weather_preferences(prefs)
