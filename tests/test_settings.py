@@ -79,12 +79,27 @@ def test_settings_command_flow():
         assert mock_save.call_count == 3
         assert mock_save_model.call_count == 1
 
+mock_models_by_provider = {
+    "gemini": ["gemini-2.5-flash", "gemini-2.5-pro", "imagen-3.0-generate-001"],
+    "openai": ["gpt-4o", "gpt-4o-mini", "dall-e-3"]
+}
+
+mock_model_prices_and_context_window = {
+    "gemini-2.5-flash": {"mode": "chat"},
+    "gemini-2.5-pro": {"mode": "chat"},
+    "gpt-4o": {"mode": "chat"},
+    "gpt-4o-mini": {"mode": "chat"},
+    "imagen-3.0-generate-001": {"mode": "image_generation"},
+    "dall-e-3": {"mode": "image_generation"}
+}
+
 def test_validate_model_settings_invalid_provider():
     from prompt_builder import validate_model_settings
     from exceptions import InvalidProviderError
     import pytest
     
-    with pytest.raises(InvalidProviderError) as excinfo:
+    with patch("litellm.models_by_provider", mock_models_by_provider), \
+         pytest.raises(InvalidProviderError) as excinfo:
         validate_model_settings({"provider": "invalid_provider", "model": "gemini-2.5-flash", "api_key": "key"})
     assert "Invalid provider 'invalid_provider'" in str(excinfo.value)
 
@@ -93,7 +108,9 @@ def test_validate_model_settings_invalid_model():
     from exceptions import InvalidModelError
     import pytest
     
-    with pytest.raises(InvalidModelError) as excinfo:
+    with patch("litellm.models_by_provider", mock_models_by_provider), \
+         patch("litellm.model_prices_and_context_window", mock_model_prices_and_context_window), \
+         pytest.raises(InvalidModelError) as excinfo:
         validate_model_settings({"provider": "google", "model": "gpt-4o", "api_key": "key"})
     assert "Invalid model 'gpt-4o' for provider 'google'" in str(excinfo.value)
 
@@ -102,7 +119,9 @@ def test_edit_llm_settings_mcq_success():
     ui = WeatherUI()
     settings = {"provider": "google", "model": "gemini-2.5-flash", "api_key": ""}
     
-    with patch("builtins.input", side_effect=["2", "1", "new_key"]):
+    with patch("litellm.models_by_provider", mock_models_by_provider), \
+         patch("litellm.model_prices_and_context_window", mock_model_prices_and_context_window), \
+         patch("builtins.input", side_effect=["2", "1", "new_key"]):
         res = ui.edit_llm_settings(settings)
         assert res["provider"] == "openai"
         assert res["model"] == "gpt-4o"
@@ -113,57 +132,65 @@ def test_edit_llm_settings_invalid_then_valid():
     ui = WeatherUI()
     settings = {"provider": "google", "model": "gemini-2.5-flash", "api_key": ""}
     
-    with patch("builtins.input", side_effect=["99", "1", "99", "2", "", "valid_key"]), \
+    with patch("litellm.models_by_provider", mock_models_by_provider), \
+         patch("litellm.model_prices_and_context_window", mock_model_prices_and_context_window), \
+         patch("builtins.input", side_effect=["99", "1", "99", "2", "", "valid_key"]), \
          patch.object(ui, "print_error") as mock_print_error:
         res = ui.edit_llm_settings(settings)
-        assert res["provider"] == "google"
+        assert res["provider"] == "gemini"
         assert res["model"] == "gemini-2.5-pro"
         assert res["api_key"] == "valid_key"
         
         assert mock_print_error.call_count == 3
         calls = [c[0][0] for c in mock_print_error.call_args_list]
-        assert "Invalid provider '99'" in calls[0]
-        assert "Invalid model '99' for provider 'google'" in calls[1]
+        assert "Invalid choice" in calls[0]
+        assert "Invalid choice" in calls[1]
         assert "API Key cannot be empty" in calls[2]
-
-def test_edit_llm_settings_mcq_show_all_providers_and_models():
-    from ui import WeatherUI
-    ui = WeatherUI()
-    settings = {"provider": "google", "model": "gemini-2.5-flash", "api_key": "some_key"}
-    
-    with patch("builtins.input", side_effect=["7", "openai", "4", "gpt-4", "new_key"]):
-        res = ui.edit_llm_settings(settings)
-        assert res["provider"] == "openai"
-        assert res["model"] == "gpt-4"
-        assert res["api_key"] == "new_key"
-
-def test_edit_llm_settings_mcq_custom_provider_and_model():
-    from ui import WeatherUI
-    ui = WeatherUI()
-    settings = {"provider": "google", "model": "gemini-2.5-flash", "api_key": "some_key"}
-    
-    with patch("builtins.input", side_effect=["8", "cohere", "4", "command-r", "new_key"]):
-        res = ui.edit_llm_settings(settings)
-        assert res["provider"] == "cohere"
-        assert res["model"] == "command-r"
-        assert res["api_key"] == "new_key"
 
 def test_is_text_model_filters():
     from prompt_builder import is_text_model
-    assert is_text_model("gpt-4o") is True
-    assert is_text_model("gemini-2.5-pro") is True
-    assert is_text_model("dall-e-3") is False
-    assert is_text_model("whisper-1") is False
-    assert is_text_model("tts-1") is False
-    assert is_text_model("text-embedding-3-large") is False
+    with patch("litellm.model_prices_and_context_window", mock_model_prices_and_context_window):
+        assert is_text_model("gpt-4o") is True
+        assert is_text_model("gemini-2.5-pro") is True
+        assert is_text_model("dall-e-3") is False
+        assert is_text_model("imagen-3.0-generate-001") is False
+        
+        # Test fallback
+        assert is_text_model("unknown-custom-text-model") is True
+        assert is_text_model("unknown-custom-image-model") is False
 
 def test_validate_model_settings_rejects_non_text_models():
     from prompt_builder import validate_model_settings
     from exceptions import InvalidModelError
     import pytest
     
-    with pytest.raises(InvalidModelError):
+    with patch("litellm.models_by_provider", mock_models_by_provider), \
+         patch("litellm.model_prices_and_context_window", mock_model_prices_and_context_window), \
+         pytest.raises(InvalidModelError):
         validate_model_settings({"provider": "openai", "model": "dall-e-3", "api_key": "key"})
         
-    with pytest.raises(InvalidModelError):
+    with patch("litellm.models_by_provider", mock_models_by_provider), \
+         patch("litellm.model_prices_and_context_window", mock_model_prices_and_context_window), \
+         pytest.raises(InvalidModelError):
         validate_model_settings({"provider": "google", "model": "imagen-3.0-generate-001", "api_key": "key"})
+
+def test_settings_command_flow_verification_failure():
+    app = MagicMock()
+    app.ui.get_choice.side_effect = [1, 6]
+    app.brain.test_connection.side_effect = Exception("Test connection failed")
+    
+    cmd = SettingsCommand(app)
+    
+    mock_settings = {"provider": "google", "model": "gemini-2.5-flash", "api_key": "some_key"}
+    
+    with patch("prompt_builder.load_model_settings", return_value=mock_settings), \
+         patch("prompt_builder.save_model_settings") as mock_save_model:
+        
+        app.ui.edit_llm_settings.return_value = mock_settings
+        result = cmd.execute()
+        
+        assert result is False
+        app.brain.test_connection.assert_called_once_with("google", "gemini-2.5-flash", "some_key")
+        # Ensure model settings were NOT saved due to connection failure
+        mock_save_model.assert_not_called()
+        app.ui.print_error.assert_called_once_with("Failed to connect: Test connection failed")
