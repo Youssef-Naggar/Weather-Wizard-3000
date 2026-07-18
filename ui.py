@@ -164,162 +164,113 @@ class WeatherUI:
         print(f"Sensitivities:         {prefs.get('weather_sensitivities')}")
         print("--------------------------------")
 
-    def _print_provider_choices(self, popular_providers: list[str], current_provider: str) -> None:
-        print("\nSelect LLM Provider:")
-        for i, prov in enumerate(popular_providers, 1):
-            suffix = " (default)" if prov == current_provider else ""
-            print(f"{i}. {prov.capitalize()}{suffix}")
-        print(f"{len(popular_providers) + 1}. Show all supported providers")
-        print(f"{len(popular_providers) + 2}. Enter custom provider name")
-
-    def _handle_all_providers(self, all_providers: list[str]) -> str:
-        from exceptions import InvalidProviderError
-        print("\nAll Supported Providers:")
+    def _print_provider_choices_grid(self, providers: list[str]) -> None:
         table = PrettyTable()
         table.header = False
-        for i in range(0, len(all_providers), 4):
-            chunk = all_providers[i:i + 4]
-            while len(chunk) < 4:
-                chunk.append("")
-            table.add_row(chunk)
+        for i in range(0, len(providers), 4):
+            row = []
+            for j in range(4):
+                if i + j < len(providers):
+                    idx = i + j + 1
+                    name = providers[i + j]
+                    row.append(f"{idx:2d}. {name}")
+                else:
+                    row.append("")
+            table.add_row(row)
         print(table)
-        print("\nEnter provider name from the list: ", end="")
-        prov_name = input().strip().lower()
-        if prov_name not in all_providers:
-            raise InvalidProviderError(prov_name, all_providers)
-        return prov_name
-
-    def _handle_custom_provider(self, all_providers: list[str]) -> str:
-        from exceptions import InvalidProviderError
-        print("\nEnter custom provider name: ", end="")
-        prov_name = input().strip().lower()
-        if prov_name not in all_providers:
-            raise InvalidProviderError(prov_name, all_providers)
-        return prov_name
-
-    def _parse_provider_choice(self, choice_str: str, popular_providers: list[str], current_provider: str) -> str:
-        import litellm
-        from exceptions import InvalidProviderError
-        
-        all_providers = sorted(list(litellm.models_by_provider.keys()))
-        if not choice_str:
-            return current_provider
-            
-        try:
-            val = int(choice_str)
-            if 1 <= val <= len(popular_providers):
-                return popular_providers[val - 1]
-            elif val == len(popular_providers) + 1:
-                return self._handle_all_providers(all_providers)
-            elif val == len(popular_providers) + 2:
-                return self._handle_custom_provider(all_providers)
-            raise ValueError()
-        except ValueError:
-            raise InvalidProviderError(choice_str, popular_providers)
 
     def _select_provider(self, current_provider: str) -> str:
-        from prompt_builder import POPULAR_PROVIDERS
-        from exceptions import InvalidProviderError
+        import litellm
+        
+        providers = sorted(list(litellm.models_by_provider.keys()))
+        
+        current_p = current_provider.lower()
+        if current_p == "google":
+            current_p = "gemini"
+            
         provider = None
         while not provider:
-            self._print_provider_choices(POPULAR_PROVIDERS, current_provider)
-            print(f"Enter choice (1-{len(POPULAR_PROVIDERS) + 2}): ", end="")
-            choice_str = input().strip()
+            print("\nSelect LLM Provider:")
+            self._print_provider_choices_grid(providers)
+            
+            default_idx = -1
+            if current_p in providers:
+                default_idx = providers.index(current_p) + 1
+                
+            prompt = f"Enter choice (1-{len(providers)})"
+            if default_idx != -1:
+                choice_str = self.get_input_with_default(prompt, str(default_idx))
+            else:
+                print(f"{prompt}: ", end="")
+                choice_str = input().strip()
+                
             try:
-                provider = self._parse_provider_choice(choice_str, POPULAR_PROVIDERS, current_provider)
-            except InvalidProviderError as e:
-                self.print_error(str(e))
+                val = int(choice_str)
+                if 1 <= val <= len(providers):
+                    provider = providers[val - 1]
+                else:
+                    raise ValueError()
+            except ValueError:
+                self.print_error(f"Invalid choice! Please enter a number between 1 and {len(providers)}.")
+                
         return provider
 
-    def _get_provider_models(self, provider: str) -> list[str]:
-        import litellm
-        from prompt_builder import POPULAR_MODELS
-        popular_list = POPULAR_MODELS.get(provider.lower())
-        raw_list = litellm.models_by_provider.get(provider.lower(), [])
-        all_list = sorted([m for m in raw_list if is_text_model(m)])
-        if popular_list:
-            return popular_list, all_list
-        else:
-            return all_list[:10], all_list
-
-    def _print_model_choices(self, provider: str, display_models: list[str], current_model: str, has_more: bool) -> None:
+    def _print_model_choices_grid(self, provider: str, models: list[str]) -> None:
         print(f"\nSelect Model for {provider.capitalize()}:")
-        for i, mdl in enumerate(display_models, 1):
-            suffix = " (default)" if mdl == current_model else ""
-            print(f"{i}. {mdl}{suffix}")
-            
-        idx = len(display_models)
-        if has_more:
-            print(f"{idx + 1}. Show all supported models")
-            print(f"{idx + 2}. Enter custom model name")
-        else:
-            print(f"{idx + 1}. Enter custom model name")
-
-    def _validate_custom_model(self, model_name: str, provider: str, all_models: list[str]) -> str:
-        import litellm
-        from exceptions import InvalidModelError
-        prov_l = provider.lower()
-        is_valid = (
-            (model_name in all_models) or 
-            (f"{prov_l}/{model_name}" in all_models) or 
-            getattr(litellm, "check_valid_model", lambda m: False)(model_name) or 
-            getattr(litellm, "check_valid_model", lambda m: False)(f"{prov_l}/{model_name}")
-        )
-        if not is_valid:
-            raise InvalidModelError(model_name, provider, all_models)
-        return model_name
-
-    def _handle_all_models(self, provider: str, all_models: list[str]) -> str:
-        print("\nAll Supported Models:")
-        sorted_models = sorted(list(all_models))
         table = PrettyTable()
         table.header = False
-        for i in range(0, len(sorted_models), 3):
-            chunk = sorted_models[i:i + 3]
-            while len(chunk) < 3:
-                chunk.append("")
-            table.add_row(chunk)
+        for i in range(0, len(models), 3):
+            row = []
+            for j in range(3):
+                if i + j < len(models):
+                    idx = i + j + 1
+                    name = models[i + j]
+                    row.append(f"{idx:2d}. {name}")
+                else:
+                    row.append("")
+            table.add_row(row)
         print(table)
-        print("\nEnter model name from the list: ", end="")
-        model_name = input().strip()
-        return self._validate_custom_model(model_name, provider, all_models)
-
-    def _parse_model_choice(self, choice_str: str, provider: str, display_models: list[str], all_models: list[str], current_model: str, has_more: bool) -> str:
-        from exceptions import InvalidModelError
-        if not choice_str:
-            return current_model
-            
-        idx_show_all = len(display_models) + 1
-        idx_custom = len(display_models) + (2 if has_more else 1)
-        
-        try:
-            val = int(choice_str)
-            if 1 <= val <= len(display_models):
-                return display_models[val - 1]
-            elif has_more and val == idx_show_all:
-                return self._handle_all_models(provider, all_models)
-            elif val == idx_custom:
-                print("\nEnter custom model name: ", end="")
-                model_name = input().strip()
-                return self._validate_custom_model(model_name, provider, all_models)
-            raise ValueError()
-        except ValueError:
-            raise InvalidModelError(choice_str, provider, display_models)
 
     def _select_model(self, provider: str, current_model: str) -> str:
-        from exceptions import InvalidModelError
-        display_models, all_models = self._get_provider_models(provider)
-        has_more = len(all_models) > len(display_models)
+        import litellm
+        from prompt_builder import is_text_model
+        
+        prov_lookup = "gemini" if provider.lower() == "google" else provider.lower()
+        raw_models = litellm.models_by_provider.get(prov_lookup, [])
+        models = sorted([m for m in raw_models if is_text_model(m, provider)])
+        
+        if not models:
+            self.print_error(f"No text completion models found for provider '{provider}'.")
+            models = sorted(list(raw_models))
+            
+        if not models:
+            print(f"Enter model name for {provider.capitalize()}: ", end="")
+            return input().strip()
+
         model = None
         while not model:
-            self._print_model_choices(provider, display_models, current_model, has_more)
-            prompt_limit = len(display_models) + (2 if has_more else 1)
-            print(f"Enter choice (1-{prompt_limit}): ", end="")
-            choice_str = input().strip()
+            self._print_model_choices_grid(provider, models)
+            
+            default_idx = -1
+            if current_model in models:
+                default_idx = models.index(current_model) + 1
+                
+            prompt = f"Enter choice (1-{len(models)})"
+            if default_idx != -1:
+                choice_str = self.get_input_with_default(prompt, str(default_idx))
+            else:
+                print(f"{prompt}: ", end="")
+                choice_str = input().strip()
+                
             try:
-                model = self._parse_model_choice(choice_str, provider, display_models, all_models, current_model, has_more)
-            except InvalidModelError as e:
-                self.print_error(str(e))
+                val = int(choice_str)
+                if 1 <= val <= len(models):
+                    model = models[val - 1]
+                else:
+                    raise ValueError()
+            except ValueError:
+                self.print_error(f"Invalid choice! Please enter a number between 1 and {len(models)}.")
+                
         return model
 
     def _get_api_key(self, provider: str, current_api_key: str) -> str:
