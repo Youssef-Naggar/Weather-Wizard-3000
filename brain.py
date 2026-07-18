@@ -1,9 +1,8 @@
-import os
-from langchain_core.prompts import ChatPromptTemplate
+import json
+import litellm
 from pydantic import BaseModel, Field
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import AIMessage
-from prompts import system_prompt, example_forecast, example_response
+from prompts import example_forecast, example_response
+from prompt_builder import load_model_settings
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -13,19 +12,35 @@ class AiSuggestionOutput(BaseModel):
 
 class Brain:
     def __init__(self):
-        self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            temperature=0.25,
-            api_key = os.environ.get("GEMINI_API_KEY", "")
-        ).with_structured_output(AiSuggestionOutput)
+        pass
 
-        self.prompt_template = ChatPromptTemplate.from_messages([
-            ("system",system_prompt),
-            ('human',example_forecast),
-            AIMessage(content=example_response),
-            ("human", "{forecast}")])
+    def ai_suggestion(self, forecast_str: str, system_prompt: str) -> str:
+        settings = load_model_settings()
+        provider = settings.get("provider", "google")
+        model = settings.get("model", "gemini-2.5-flash")
+        api_key = settings.get("api_key", "")
 
-    def ai_suggestion(self,forecast_str:str)->str:
-        chain = self.prompt_template | self.llm
-        response = chain.invoke({"forecast": forecast_str})
-        return response.ai_suggestion
+        # Format model name for litellm (e.g., "gemini/gemini-2.5-flash")
+        full_model_name = model
+        if provider and "/" not in model:
+            prov_prefix = "gemini" if provider.lower() == "google" else provider.lower()
+            full_model_name = f"{prov_prefix}/{model}"
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": example_forecast},
+            {"role": "assistant", "content": example_response},
+            {"role": "user", "content": forecast_str}
+        ]
+
+        response = litellm.completion(
+            model=full_model_name,
+            messages=messages,
+            response_format=AiSuggestionOutput,
+            api_key=api_key,
+            temperature=0.25
+        )
+
+        content = response.choices[0].message.content
+        data = json.loads(content)
+        return data.get("ai_suggestion", content)

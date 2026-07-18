@@ -40,12 +40,12 @@ def get_auto_location() -> List[float]:
             response: requests.Response = requests.get(provider["url"], timeout=10.0)
 
             if response.status_code != 200:
-                raise Exception(f"HTTP Status {response.status_code}")
+                raise ValueError(f"HTTP Status {response.status_code}")
 
             data: Dict[str, Any] = response.json()
 
             if provider["name"] == "ip-api.com" and data.get("status") == "fail":
-                raise Exception(f"API failure: {data.get('message', 'Unknown error')}")
+                raise ValueError(f"API failure: {data.get('message', 'Unknown error')}")
 
             coordinates = provider["parser"](data)
             print(f"✅ Location successfully captured using {provider['name']}!")

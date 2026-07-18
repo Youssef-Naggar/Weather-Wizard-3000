@@ -5,6 +5,7 @@ from utilities import get_auto_location
 from forecast import Forecast, WeatherClient
 from brain import Brain
 from ui import WeatherUI
+from prompt_builder import build_prompt
 
 class Command(ABC):
     @abstractmethod
@@ -102,9 +103,39 @@ class GetAiSuggestionCommand(Command):
         self.app = app
 
     def execute(self) -> bool:
+        import os
+        from prompt_builder import load_model_settings, save_preferences
+
+        # 1. Check if model settings and API key are configured
+        from exceptions import SettingsValidationError
+        try:
+            model_settings = load_model_settings()
+        except SettingsValidationError as e:
+            self.app.ui.print_error(f"LLM settings are invalid: {str(e)}")
+            self.app.ui.print_message("Please go to Settings to configure them first.")
+            self.app.ai_loop_running = False
+            return False
+
+        if not os.path.exists('model-settings.json') or not model_settings.get("api_key"):
+            self.app.ui.print_error("LLM Provider or API key is not configured. Please go to Settings to configure them first.")
+            self.app.ai_loop_running = False
+            return False
+
+        # 2. Check if preferences file exists
+        if not os.path.exists('preferences.json'):
+            self.app.ui.print_error("No personal preferences found. Redirecting to setup a new profile...")
+            new_prefs = self.app.ui.create_new_profile_flow()
+            save_preferences(new_prefs)
+            self.app.ui.print_message("\n✅ Personal profile created successfully!")
+
+        commute_type = self.app.ui.get_commute_type()
+        trip_type = self.app.ui.get_trip_type()
+        dress_code = self.app.ui.get_dress_code()
+
         self.app.ui.print_message("\n🧙‍♂️ Wizard suggestion:")
         try:
-            suggestion = self.app.brain.ai_suggestion(self.app.weather_summary)
+            system_prompt = build_prompt(commute_type, trip_type, dress_code)
+            suggestion = self.app.brain.ai_suggestion(self.app.weather_summary, system_prompt)
             self.app.ui.print_message(suggestion)
         except Exception as err:
             self.app.ui.print_error(f"AI suggestion failed: {str(err)}")
@@ -118,6 +149,61 @@ class SkipAiSuggestionCommand(Command):
     def execute(self) -> bool:
         self.app.ai_loop_running = False
         return False
+
+class SettingsCommand(Command):
+    def __init__(self, app: 'WeatherApp') -> None:
+        self.app = app
+
+    def execute(self) -> bool:
+        from prompt_builder import (
+            load_preferences, save_preferences,
+            load_model_settings, save_model_settings
+        )
+        loop_running = True
+        while loop_running:
+            self.app.ui.print_settings_menu()
+            choice = self.app.ui.get_choice()
+            if choice == 1:
+                from exceptions import SettingsValidationError
+                try:
+                    settings = load_model_settings()
+                except SettingsValidationError as e:
+                    self.app.ui.print_error(f"Configuration load error: {str(e)}")
+                    self.app.ui.print_message("Resetting to default LLM settings...")
+                    settings = {
+                        "provider": "google",
+                        "model": "gemini-2.5-flash",
+                        "api_key": ""
+                    }
+                updated_settings = self.app.ui.edit_llm_settings(settings)
+                try:
+                    save_model_settings(updated_settings)
+                    self.app.ui.print_message("\n✅ LLM settings updated successfully!")
+                except SettingsValidationError as e:
+                    self.app.ui.print_error(f"Failed to save settings: {str(e)}")
+            elif choice == 2:
+                prefs = load_preferences()
+                updated_prefs = self.app.ui.edit_weather_preferences(prefs)
+                save_preferences(updated_prefs)
+                self.app.ui.print_message("\n✅ Weather preferences updated successfully!")
+            elif choice == 3:
+                prefs = load_preferences()
+                updated_prefs = self.app.ui.edit_personal_profile(prefs)
+                save_preferences(updated_prefs)
+                self.app.ui.print_message("\n✅ Personal profile updated successfully!")
+            elif choice == 4:
+                new_prefs = self.app.ui.create_new_profile_flow()
+                save_preferences(new_prefs)
+                self.app.ui.print_message("\n✅ New profile preferences saved successfully!")
+            elif choice == 5:
+                prefs = load_preferences()
+                self.app.ui.view_current_settings(prefs)
+            elif choice == 6:
+                loop_running = False
+            else:
+                self.app.ui.print_error("Invalid option! Please try again.")
+        return False
+
 
 class WeatherApp:
     def __init__(self) -> None:
@@ -137,7 +223,8 @@ class WeatherApp:
             3: SelectDateCommand(self, 2),
             4: SelectDateCommand(self, 3),
             5: SelectDateCommand(self, 4),
-            6: ExitCommand(self),
+            6: SettingsCommand(self),
+            7: ExitCommand(self),
         }
 
         self.location_commands: Dict[int, Command] = {
