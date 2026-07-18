@@ -14,6 +14,28 @@ class Brain:
     def __init__(self):
         pass
 
+    def test_connection(self, provider: str, model: str, api_key: str) -> str:
+        # Format model name for litellm (e.g., "gemini/gemini-2.5-flash")
+        full_model_name = model
+        if provider and "/" not in model:
+            prov_prefix = "gemini" if provider.lower() == "google" else provider.lower()
+            full_model_name = f"{prov_prefix}/{model}"
+
+        messages = [
+            {"role": "user", "content": "Acknowledge system boot. Say 'hi' in one word."}
+        ]
+
+        response = litellm.completion(
+            model=full_model_name,
+            messages=messages,
+            api_key=api_key,
+            max_tokens=5,
+            timeout=10.0
+        )
+
+        content = response.choices[0].message.content
+        return content.strip() if content else ""
+
     def ai_suggestion(self, forecast_str: str, system_prompt: str) -> str:
         settings = load_model_settings()
         provider = settings.get("provider", "google")
