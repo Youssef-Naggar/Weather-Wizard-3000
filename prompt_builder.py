@@ -28,14 +28,14 @@ def save_preferences(prefs: dict) -> None:
 def is_text_model(model_name: str, provider: str = None) -> bool:
     import litellm
     # 1. Try to find the model in litellm's pricing map
-    info = litellm.model_prices_and_context_window.get(model_name)
+    info = litellm.model_cost.get(model_name)
     if not info and provider:
-        info = litellm.model_prices_and_context_window.get(f"{provider.lower()}/{model_name}")
+        info = litellm.model_cost.get(f"{provider.lower()}/{model_name}")
     if not info and provider:
         # Also map 'google' to 'gemini'
         prov_l = provider.lower()
         lookup_prov = "gemini" if prov_l == "google" else prov_l
-        info = litellm.model_prices_and_context_window.get(f"{lookup_prov}/{model_name}")
+        info = litellm.model_cost.get(f"{lookup_prov}/{model_name}")
 
     if info and "mode" in info:
         return info["mode"] in ("chat", "completion")
