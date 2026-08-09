@@ -19,8 +19,10 @@ The application fetches real-time forecast data via the OpenWeatherMap API, reso
   - Automated location detection using IP coordinates (with fallback support).
   - Search by city name.
   - Manual coordinate inputs (latitude and longitude).
-- **Universal LLM Setup (SDK-Agnostic):** Dynamically configure and switch model routing to any supported provider in **LiteLLM** (OpenAI, Anthropic, Gemini, Groq, Cohere, Ollama, etc.) directly from the settings menu.
+- **Universal LLM Setup (SDK-Agnostic):** Dynamically configure and switch model routing to any supported provider in **LiteLLM** (OpenAI, Anthropic, Gemini, Groq, Cohere, Ollama, LM Studio, vLLM, custom local endpoints) directly from the settings menu.
 - **Hermes-Style Live Verification:** Credentials and routing are validated via a live test call to the LLM before any configuration changes are written to `model-settings.json`.
+- **Multimodal Closet Synthesizer:** Automatic bulk scanning of clothing photos in `closet/` using Vision LLMs to extract garment attributes and atomically update `closet.json`.
+- **Virtual Avatar Try-On ("Drawer AI"):** Synthesizes full-body try-on preview images combining recommended outfit garment photos with a user avatar photo (`user_avatar.png`), saved locally under `outfits/`. Interactively triggered directly after receiving outfit recommendations.
 - **Personalized Recommendations:**
   - Configurable comfort settings (cold thresholds, hot thresholds, perfect temperature).
   - Style configurations (style profile, favorite colors).
@@ -51,7 +53,7 @@ The application fetches real-time forecast data via the OpenWeatherMap API, reso
 
 3. (Optional) Install development and testing dependencies:
    ```bash
-   pip install pytest pytest-cov ruff pyrefly bandit radon xenon
+   pip install pytest pytest-cov ruff pyrefly bandit radon xenon graphify
    ```
 
 4. Create a `.env` file in the root directory and configure your OpenWeatherMap API Key:
@@ -79,11 +81,17 @@ weather-wizard-3000/
 ├── ui.py                # Handles all input collection, grid layouts, and CLI menus
 ├── forecast.py          # Handles weather processing logic and OpenWeatherMap clients
 ├── brain.py             # Executes calls and test checks to LiteLLM completion API
-├── prompt_builder.py    # Manages user profiles, model validation, and system prompt compilations
+├── prompt_builder.py    # Formats wardrobe items and compiles system prompts
+├── settings_manager.py  # Handles all preferences and AI settings JSON I/O and validation
+├── model_registry.py    # LiteLLM model routing and capability detection (text, vision, image)
+├── image_utils.py       # Shared base64 image encoding and data URI formatting
+├── drawer.py            # Virtual Avatar Try-On image synthesis engine ("Drawer AI")
+├── synthesizer.py       # Scans closet photos and synthesizes garment data via Vision LLM
 ├── prompts.py           # Contains system templates and mock assistant response fixtures
 ├── exceptions.py        # Defines domain-specific validation and setting errors
 └── utilities.py         # Includes geolocation provider registries and kelvin conversions
 ```
+
 
 - **Model Layer:** `Forecast` (domain entity containing weather metrics) and `WeatherClient` (HTTP fetcher).
 - **View Layer:** `WeatherUI` (CLI layout grids and user prompts).

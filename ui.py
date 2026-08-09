@@ -1,6 +1,9 @@
 import datetime
+from typing import Any, List, Optional
 from prettytable import PrettyTable
-from prompt_builder import is_text_model
+from wardrobe_item import AiSuggestionOutput
+
+
 
 class WeatherUI:
     def print_welcome(self) -> None:
@@ -29,13 +32,24 @@ class WeatherUI:
     def print_settings_menu(self) -> None:
         print("\n⚙️  WEATHER WIZARD 3000 SETTINGS")
         print("--------------------------------")
-        print("1. Configure LLM Provider & Model")
+        print("1. Configure AI Models & Credentials")
         print("2. Edit Weather & Temperature Preferences")
         print("3. Edit Personal Style & Profile")
         print("4. Create New Profile Preferences")
         print("5. View Current Settings")
-        print("6. Back to Main Menu")
-        print("Enter your choice (1-6): ", end="")
+        print("6. Synthesize Closet (Scan Photo Folder)")
+        print("7. Configure Virtual Avatar Photo Path")
+        print("8. Back to Main Menu")
+        print("Enter your choice (1-8): ", end="")
+
+    def print_unified_ai_models_menu(self) -> None:
+        print("\n⚙️  CONFIGURE AI MODELS & CREDENTIALS")
+        print("------------------------------------")
+        print("1. Configure Weather Wizard Brain (Text LLM)")
+        print("2. Configure Closet Synthesizer (Vision LLM)")
+        print("3. Configure Virtual Avatar Drawer (Image AI)")
+        print("4. Back to Settings Menu")
+        print("Enter your choice (1-4): ", end="")
 
 
     def print_ai_menu(self) -> None:
@@ -97,6 +111,42 @@ class WeatherUI:
 
     def print_error(self, message: str) -> None:
         print(f"⚠️  {message}")
+
+    def _print_outfit_details(self, outfit: Any, idx: int) -> None:
+        print(f"\n✨ Outfit {idx}: {outfit.outfit_title}")
+        top_id_str = f" [Closet ID: {outfit.top_id}]" if outfit.top_id else " [Not in Closet]"
+        bottom_id_str = f" [Closet ID: {outfit.bottom_id}]" if outfit.bottom_id else " [Not in Closet]"
+        shoes_id_str = f" [Closet ID: {outfit.shoes_id}]" if outfit.shoes_id else " [Not in Closet]"
+        print(f"   - Top: {outfit.top_description}{top_id_str}")
+        print(f"   - Bottom: {outfit.bottom_description}{bottom_id_str}")
+        print(f"   - Shoes: {outfit.shoes_description}{shoes_id_str}")
+        if outfit.jacket_description:
+            jacket_id_str = f" [Closet ID: {outfit.jacket_id}]" if outfit.jacket_id else " [Not in Closet]"
+            print(f"   - Jacket: {outfit.jacket_description}{jacket_id_str}")
+        if outfit.accessory_descriptions:
+            acc_strs = []
+            for desc, acc_id in zip(outfit.accessory_descriptions, outfit.accessory_ids or []):
+                acc_strs.append(f"{desc} [Closet ID: {acc_id}]" if acc_id else desc)
+            print(f"   - Accessories: {', '.join(acc_strs)}")
+
+    def print_ai_suggestion(self, suggestion: Any) -> None:
+        if isinstance(suggestion, str):
+            print(suggestion)
+            return
+
+        if isinstance(suggestion, AiSuggestionOutput):
+            if suggestion.ai_suggestion:
+                print(f"\n💬 {suggestion.ai_suggestion}\n")
+
+            if suggestion.recommended_outfits:
+                print("👔 RECOMMENDED OUT FITS FROM YOUR CLOSET:")
+                print("========================================")
+                for idx, outfit in enumerate(suggestion.recommended_outfits, 1):
+                    self._print_outfit_details(outfit, idx)
+                print("========================================\n")
+            return
+
+        print(str(suggestion))
 
     def get_input_with_default(self, prompt: str, default_val: str) -> str:
         print(f"{prompt} [{default_val}]: ", end="")
@@ -183,6 +233,8 @@ class WeatherUI:
         import litellm
         
         providers = sorted(list(litellm.models_by_provider.keys()))
+        custom_opt = "[C] Custom Endpoint / Localhost (Ollama, LM Studio, vLLM)"
+        display_providers = providers + [custom_opt]
         
         current_p = current_provider.lower()
         if current_p == "google":
@@ -191,27 +243,27 @@ class WeatherUI:
         provider = None
         while not provider:
             print("\nSelect LLM Provider:")
-            self._print_provider_choices_grid(providers)
+            self._print_provider_choices_grid(display_providers)
             
             default_idx = -1
             if current_p in providers:
                 default_idx = providers.index(current_p) + 1
+            elif current_p in ("custom", "ollama", "local", "lmstudio", "vllm"):
+                default_idx = len(display_providers)
                 
-            prompt = f"Enter choice (1-{len(providers)})"
-            if default_idx != -1:
-                choice_str = self.get_input_with_default(prompt, str(default_idx))
-            else:
-                print(f"{prompt}: ", end="")
-                choice_str = input().strip()
+            prompt = f"Enter choice (1-{len(display_providers)})"
+            choice_str = self.get_input_with_default(prompt, str(default_idx)) if default_idx != -1 else input(f"{prompt}: ").strip()
                 
             try:
                 val = int(choice_str)
                 if 1 <= val <= len(providers):
                     provider = providers[val - 1]
+                elif val == len(display_providers):
+                    provider = "custom"
                 else:
                     raise ValueError()
             except ValueError:
-                self.print_error(f"Invalid choice! Please enter a number between 1 and {len(providers)}.")
+                self.print_error(f"Invalid choice! Please enter a number between 1 and {len(display_providers)}.")
                 
         return provider
 
@@ -231,45 +283,53 @@ class WeatherUI:
             table.add_row(row)
         print(table)
 
-    def _select_model(self, provider: str, current_model: str) -> str:
+    def _filter_models_for_capability(self, provider: str, mode: str) -> List[str]:
         import litellm
-        
+        from model_registry import is_text_model, is_vision_model, is_image_model
+
         prov_lookup = "gemini" if provider.lower() == "google" else provider.lower()
         raw_models = litellm.models_by_provider.get(prov_lookup, [])
-        models = sorted([m for m in raw_models if is_text_model(m, provider)])
-        
+
+        checker_map = {
+            "vision": is_vision_model,
+            "image": is_image_model,
+        }
+        checker = checker_map.get(mode, is_text_model)
+        models = sorted([m for m in raw_models if checker(m, provider)])
+
         if not models:
-            self.print_error(f"No text completion models found for provider '{provider}'.")
+            self.print_error(f"No {mode} models found for provider '{provider}'. Showing all provider models.")
             models = sorted(list(raw_models))
-            
-        if not models:
-            print(f"Enter model name for {provider.capitalize()}: ", end="")
-            return input().strip()
+        return models
+
+    def _select_model(self, provider: str, current_model: str, mode: str = "text") -> str:
+        models = self._filter_models_for_capability(provider, mode)
+        custom_option = "[Enter custom model name...]"
+        display_models = models + [custom_option]
 
         model = None
         while not model:
-            self._print_model_choices_grid(provider, models)
-            
-            default_idx = -1
-            if current_model in models:
-                default_idx = models.index(current_model) + 1
-                
-            prompt = f"Enter choice (1-{len(models)})"
-            if default_idx != -1:
-                choice_str = self.get_input_with_default(prompt, str(default_idx))
-            else:
-                print(f"{prompt}: ", end="")
-                choice_str = input().strip()
-                
+            self._print_model_choices_grid(provider, display_models)
+
+            default_idx = models.index(current_model) + 1 if current_model in models else (len(display_models) if current_model else -1)
+            prompt = f"Enter choice (1-{len(display_models)})"
+            choice_str = self.get_input_with_default(prompt, str(default_idx)) if default_idx != -1 else input(f"{prompt}: ").strip()
+
             try:
                 val = int(choice_str)
                 if 1 <= val <= len(models):
-                    model = models[val - 1]
+                    model = display_models[val - 1]
+                elif val == len(display_models):
+                    custom_name = input(f"Enter custom model name for {provider.capitalize()}: ").strip()
+                    if custom_name:
+                        model = custom_name
+                    else:
+                        self.print_error("Model name cannot be empty. Please enter a valid custom model name.")
                 else:
                     raise ValueError()
             except ValueError:
-                self.print_error(f"Invalid choice! Please enter a number between 1 and {len(models)}.")
-                
+                self.print_error(f"Invalid choice! Please enter a number between 1 and {len(display_models)}.")
+
         return model
 
     def _get_api_key(self, provider: str, current_api_key: str) -> str:
@@ -298,14 +358,29 @@ class WeatherUI:
                 api_key = input_key
         return api_key
 
-    def edit_llm_settings(self, settings: dict) -> dict:
-        print("\n--- Configure LLM Provider & Model ---")
+    def edit_llm_settings(self, settings: dict, mode: str = "text") -> dict:
+        print(f"\n--- Configure LLM Provider & Model ({mode.capitalize()} Mode) ---")
         
         current_provider = settings.get("provider", "google").lower()
         provider = self._select_provider(current_provider)
         
+        if provider == "custom":
+            current_api_base = settings.get("api_base") or "http://localhost:11434"
+            api_base = self.get_input_with_default("Enter Custom API Base URL (e.g. http://localhost:11434)", current_api_base)
+            current_model = settings.get("model") or "ollama/llama3:8b"
+            model = self.get_input_with_default("Enter Custom Model Identifier (e.g. ollama/llama3:8b)", current_model)
+            current_api_key = settings.get("api_key", "")
+            print(f"API Key (Optional for local server) [{current_api_key or 'None'}]: ", end="")
+            input_key = input().strip()
+            api_key = input_key if input_key else current_api_key
+            settings["provider"] = provider
+            settings["model"] = model
+            settings["api_key"] = api_key
+            settings["api_base"] = api_base
+            return settings
+
         current_model = settings.get("model", "")
-        model = self._select_model(provider, current_model)
+        model = self._select_model(provider, current_model, mode=mode)
         
         current_api_key = settings.get("api_key", "")
         api_key = self._get_api_key(provider, current_api_key)
@@ -313,7 +388,9 @@ class WeatherUI:
         settings["provider"] = provider
         settings["model"] = model
         settings["api_key"] = api_key
+        settings["api_base"] = None
         return settings
+
 
     def create_new_profile_flow(self) -> dict:
         print("\n==============================================")
@@ -323,3 +400,58 @@ class WeatherUI:
         prefs = self.edit_weather_preferences(prefs)
         prefs = self.edit_personal_profile(prefs)
         return prefs
+
+    def print_synthesis_results(self, count: int) -> None:
+        print("\n==============================================")
+        print("📸 CLOSET MULTIMODAL SYNTHESIS COMPLETE 📸")
+        print("==============================================")
+        if count == 0:
+            print("ℹ️ No new untagged clothing photos found in closet/ directory.")
+        else:
+            print(f"✅ Successfully ingested {count} new clothing items into closet.json!")
+        print("==============================================\n")
+
+    def print_tryon_result(self, output_path: str) -> None:
+        print("\n==============================================")
+        print("👕 VIRTUAL AVATAR TRY-ON PREVIEW GENERATED 👕")
+        print("==============================================")
+        print(f"🖼️ Preview file: [tryon_outfit](file:///{output_path.replace('\\', '/')})")
+        print(f"📁 Local Path: {output_path}")
+        print("==============================================\n")
+
+    def get_tryon_outfit_choice(self, num_outfits: int) -> int:
+        if num_outfits <= 0:
+            return 0
+        print(f"Enter outfit number (1-{num_outfits}), or 0 to skip: ", end="")
+        while True:
+            try:
+                val = int(input().strip())
+                if 0 <= val <= num_outfits:
+                    return val
+                self.print_error(f"Invalid choice! Please enter a number between 0 and {num_outfits}.")
+            except ValueError:
+                self.print_error(f"Invalid choice! Please enter a number between 0 and {num_outfits}.")
+
+    def ask_create_demo_yes_no(self) -> bool:
+        print("\n🎨 Do you want to create a demo try-on preview for an outfit? (y/n): ", end="")
+        ans = input().strip().lower()
+        return ans in ("y", "yes")
+
+    def configure_avatar_path_flow(self, current_path: str) -> Optional[str]:
+        import os
+        print("\n🖼️  CONFIGURE VIRTUAL AVATAR PHOTO PATH")
+        print("---------------------------------------")
+        if current_path and os.path.exists(current_path):
+            print(f"Current Avatar Photo Path: {current_path}")
+            print("1. Configure new avatar photo path")
+            print("2. Back to AI settings")
+            print("Enter choice (1-2): ", end="")
+            choice = input().strip()
+            if choice == "2":
+                return None
+
+        print("Enter path to your avatar photo (e.g. user_avatar.png or C:/path/photo.jpg): ", end="")
+        new_path = input().strip()
+        return new_path if new_path else None
+
+

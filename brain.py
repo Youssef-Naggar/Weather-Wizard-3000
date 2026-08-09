@@ -1,52 +1,50 @@
 import json
 import litellm
-from pydantic import BaseModel, Field
 from prompts import example_forecast, example_response
-from prompt_builder import load_model_settings
+from settings_manager import load_model_settings
+from wardrobe_item import AiSuggestionOutput
+from pydantic import ValidationError
+from model_registry import format_litellm_model_name
 from dotenv import load_dotenv
 
 load_dotenv()
+litellm.suppress_debug_info = True
 
-class AiSuggestionOutput(BaseModel):
-    ai_suggestion: str = Field()
 
 class Brain:
     def __init__(self):
         pass
 
-    def test_connection(self, provider: str, model: str, api_key: str) -> str:
-        # Format model name for litellm (e.g., "gemini/gemini-2.5-flash")
-        full_model_name = model
-        if provider and "/" not in model:
-            prov_prefix = "gemini" if provider.lower() == "google" else provider.lower()
-            full_model_name = f"{prov_prefix}/{model}"
+    def test_connection(self, provider: str, model: str, api_key: str, api_base: str = None) -> str:
+        full_model_name = format_litellm_model_name(provider, model)
 
         messages = [
             {"role": "user", "content": "Acknowledge system boot. Say 'hi' in one word."}
         ]
 
-        response = litellm.completion(
-            model=full_model_name,
-            messages=messages,
-            api_key=api_key,
-            max_tokens=5,
-            timeout=10.0
-        )
+        kwargs = {
+            "model": full_model_name,
+            "messages": messages,
+            "api_key": api_key,
+            "max_tokens": 5,
+            "timeout": 60.0
+        }
+        if api_base:
+            kwargs["api_base"] = api_base
+
+        response = litellm.completion(**kwargs)
 
         content = response.choices[0].message.content
         return content.strip() if content else ""
 
-    def ai_suggestion(self, forecast_str: str, system_prompt: str) -> str:
+    def ai_suggestion(self, forecast_str: str, system_prompt: str) -> AiSuggestionOutput:
         settings = load_model_settings()
         provider = settings.get("provider", "google")
         model = settings.get("model", "gemini-2.5-flash")
         api_key = settings.get("api_key", "")
+        api_base = settings.get("api_base")
 
-        # Format model name for litellm (e.g., "gemini/gemini-2.5-flash")
-        full_model_name = model
-        if provider and "/" not in model:
-            prov_prefix = "gemini" if provider.lower() == "google" else provider.lower()
-            full_model_name = f"{prov_prefix}/{model}"
+        full_model_name = format_litellm_model_name(provider, model)
 
         messages = [
             {"role": "system", "content": system_prompt},
@@ -55,14 +53,24 @@ class Brain:
             {"role": "user", "content": forecast_str}
         ]
 
-        response = litellm.completion(
-            model=full_model_name,
-            messages=messages,
-            response_format=AiSuggestionOutput,
-            api_key=api_key,
-            temperature=0.25
-        )
+        kwargs = {
+            "model": full_model_name,
+            "messages": messages,
+            "response_format": AiSuggestionOutput,
+            "api_key": api_key,
+            "temperature": 0.25
+        }
+        if api_base:
+            kwargs["api_base"] = api_base
+
+        response = litellm.completion(**kwargs)
 
         content = response.choices[0].message.content
-        data = json.loads(content)
-        return data.get("ai_suggestion", content)
+        if not content:
+            return AiSuggestionOutput(ai_suggestion="")
+
+        try:
+            return AiSuggestionOutput.model_validate_json(content)
+        except (json.JSONDecodeError, ValidationError, ValueError):
+            # Fallback if raw text returned
+            return AiSuggestionOutput(ai_suggestion=content)
